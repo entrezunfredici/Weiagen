@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: weiagen-preprod
+  labels:
+    app.kubernetes.io/name: weiagen
+    app.kubernetes.io/instance: preprod

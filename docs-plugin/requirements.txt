@@ -1,0 +1,6 @@
+# Moved from odoo-plugin/requirements.txt on 2026-09-24 together with
+# w_docs/ (see .agents/DECISIONS.md) — not new dependencies to this
+# deployment, just a new owner.
+openpyxl
+python-docx
+python-pptx

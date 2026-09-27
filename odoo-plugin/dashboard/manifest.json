@@ -1,0 +1,14 @@
+{
+  "name": "odoo",
+  "label": "Odoo",
+  "description": "Manage Odoo connection profiles and deny-by-default rights",
+  "icon": "Database",
+  "version": "1.0.0",
+  "tab": {
+    "path": "/odoo",
+    "position": "after:skills"
+  },
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}

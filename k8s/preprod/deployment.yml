@@ -1,0 +1,131 @@
+# =============================================================================
+#  Deployments preprod — Weiagen
+#
+#  Prérequis sur le cluster :
+#    - Namespace weiagen-preprod créé (k8s/preprod/namespace.yml)
+#    - Secret weiagen-preprod-secrets créé (voir k8s/secrets.env.example)
+#    - ConfigMap weiagen-preprod-config créée (k8s/preprod/configmap.yml)
+#
+#  DÉSACTIVÉ pour l'instant : ce déploiement n'est appliqué par le CD
+#  (.github/workflows/cd.yml) que si la variable GitHub Actions
+#  K8S_PREPROD_ENABLED=true est définie — le cluster Weiagen n'existe pas
+#  encore. Applicable manuellement dès qu'un cluster est prêt :
+#    kubectl apply -f k8s/preprod/
+# =============================================================================
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: weiagen-preprod-hermes-data
+  namespace: weiagen-preprod
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weiagen-preprod-hermes
+  namespace: weiagen-preprod
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: weiagen-preprod-hermes
+  template:
+    metadata:
+      labels:
+        app: weiagen-preprod-hermes
+    spec:
+      containers:
+        - name: hermes
+          image: ${DOCKERHUB_USERNAME}/weiagen_hermes_preprod:latest # substitué par le CD
+          imagePullPolicy: Always
+          command: ["gateway", "run"]
+          ports:
+            - name: gateway
+              containerPort: 8642
+            - name: dashboard
+              containerPort: 9119
+          envFrom:
+            - configMapRef:
+                name: weiagen-preprod-config
+            - secretRef:
+                name: weiagen-preprod-secrets
+          readinessProbe:
+            tcpSocket:
+              port: 8642
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: hermes-data
+              mountPath: /opt/data
+      volumes:
+        - name: hermes-data
+          persistentVolumeClaim:
+            claimName: weiagen-preprod-hermes-data
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weiagen-preprod-searxng
+  namespace: weiagen-preprod
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: weiagen-preprod-searxng
+  template:
+    metadata:
+      labels:
+        app: weiagen-preprod-searxng
+    spec:
+      containers:
+        - name: searxng
+          image: searxng/searxng:latest
+          env:
+            - name: SEARXNG_BASE_URL
+              value: "http://weiagen-preprod-searxng:8080/"
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: searxng-settings
+              mountPath: /etc/searxng/settings.yml
+              subPath: settings.yml
+      volumes:
+        # Créée manuellement une fois :
+        #   kubectl create configmap weiagen-preprod-searxng-settings \
+        #     -n weiagen-preprod --from-file=settings.yml=searxng/settings.yml
+        - name: searxng-settings
+          configMap:
+            name: weiagen-preprod-searxng-settings

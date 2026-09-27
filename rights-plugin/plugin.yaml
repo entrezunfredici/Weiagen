@@ -1,0 +1,15 @@
+name: rights
+version: 1.0.0
+description: >
+  Generic deny-by-default authorization: identity → role bindings (any
+  platform, not Slack-specific) and role → resource rights, usable by any
+  plugin (odoo-plugin delegates to it), any Hermes built-in tool/MCP tool by
+  name (via pre_tool_call), and exposing the resolved identity to the model's
+  context for MCP servers to use in their own RBAC if they choose to (via
+  pre_llm_call). Replaces odoo-plugin's OdooRight entirely — see
+  .agents/DECISIONS.md.
+author: "@fred"
+kind: standalone
+provides_hooks:
+  - pre_tool_call
+  - pre_llm_call

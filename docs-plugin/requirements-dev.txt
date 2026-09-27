@@ -1,0 +1,3 @@
+# Dev-only dependencies for running the test suite (docs-plugin/tests/).
+-r requirements.txt
+pytest>=8.0

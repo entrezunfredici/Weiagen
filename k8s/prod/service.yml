@@ -1,0 +1,38 @@
+# =============================================================================
+#  Services prod — Weiagen
+#  ClusterIP uniquement : l'accès externe au dashboard passe par l'Ingress
+#  (k8s/prod/ingress.yml). Le port gateway (8642) n'est pas exposé
+#  publiquement — Slack/les autres plateformes sont des connexions sortantes.
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: weiagen-prod-hermes
+  namespace: weiagen
+spec:
+  type: ClusterIP
+  selector:
+    app: weiagen-prod-hermes
+  ports:
+    - name: gateway
+      port: 8642
+      targetPort: 8642
+    - name: dashboard
+      port: 9119
+      targetPort: 9119
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: weiagen-prod-searxng
+  namespace: weiagen
+spec:
+  type: ClusterIP
+  selector:
+    app: weiagen-prod-searxng
+  ports:
+    - port: 8080
+      targetPort: 8080

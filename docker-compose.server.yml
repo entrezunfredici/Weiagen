@@ -1,0 +1,79 @@
+# Déploiement serveur distant — utilise l'image custom buildée depuis le
+# Dockerfile de ce dépôt (plugin odoo + skills + dépendances bakés dedans)
+# au lieu de l'image publiée + bind mounts utilisés par docker-compose.yml
+# en local. Le serveur n'a pas ce dépôt cloné sur disque, donc pas de bind
+# mount possible — voir DECISIONS.md et README.md pour le détail du choix
+# et la procédure build/push/pull.
+#
+# Usage sur le serveur :
+#   docker compose -f docker-compose.server.yml pull
+#   docker compose -f docker-compose.server.yml up -d
+services:
+  hermes:
+    image: ${HERMES_IMAGE}
+    container_name: hermes
+    restart: unless-stopped
+    command: ["gateway", "run"]
+    shm_size: "1g"
+    ports:
+      - "8642:8642"
+      - "127.0.0.1:9119:9119"
+    volumes:
+      - ${HOME}/.hermes:/opt/data
+    environment:
+      HERMES_UID: "${HERMES_UID:-1000}"
+      HERMES_GID: "${HERMES_GID:-1000}"
+      HERMES_DASHBOARD: "1"
+      HERMES_DASHBOARD_BASIC_AUTH_USERNAME: "${HERMES_DASHBOARD_BASIC_AUTH_USERNAME}"
+      HERMES_DASHBOARD_BASIC_AUTH_PASSWORD: "${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD}"
+      HERMES_DASHBOARD_BASIC_AUTH_SECRET: "${HERMES_DASHBOARD_BASIC_AUTH_SECRET}"
+      SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN}"
+      SLACK_APP_TOKEN: "${SLACK_APP_TOKEN}"
+      SLACK_ALLOWED_USERS: "${SLACK_ALLOWED_USERS:-}"
+      SLACK_ALLOWED_CHANNELS: "${SLACK_ALLOWED_CHANNELS:-}"
+      SLACK_ALLOW_ALL_USERS: "${SLACK_ALLOW_ALL_USERS:-true}"
+      ODOO_PLUGIN_ENCRYPTION_KEY: "${ODOO_PLUGIN_ENCRYPTION_KEY}"
+      # Durée de vie des jetons d'identité MCP — voir le commentaire détaillé
+      # dans docker-compose.yml. Les clés de signature elles-mêmes vivent
+      # dans le dashboard/CLI (models.McpSigningKey), pas dans .env.
+      RIGHTS_MCP_TOKEN_TTL_SECONDS: "${RIGHTS_MCP_TOKEN_TTL_SECONDS:-}"
+      # audit-plugin — voir le commentaire détaillé dans docker-compose.yml.
+      AUDIT_RETENTION_DAYS: "${AUDIT_RETENTION_DAYS:-}"
+      AUDIT_AGENT_TOOL_ENABLED: "${AUDIT_AGENT_TOOL_ENABLED:-}"
+      # docs-plugin — voir le commentaire détaillé dans docker-compose.yml.
+      DOCS_OUTPUT_DIRS: "${DOCS_OUTPUT_DIRS:-}"
+      # Backend de recherche web (provider "searxng" de Hermes, voir
+      # agent/web_search_provider.py) — sans clé API configurée (Brave,
+      # Tavily, Exa...), Hermes retombe sur du scraping DuckDuckGo brut
+      # (provider "ddgs"), peu fiable et source d'URLs halluciné. SearXNG
+      # auto-hébergé (service ci-dessous, réseau interne uniquement)
+      # remplace ça par de vrais résultats agrégés, gratuit et sans
+      # limite de requêtes. Voir CHANGELOG_AGENT.md, 2026-08-04.
+      SEARXNG_URL: "http://searxng:8080"
+    depends_on:
+      - searxng
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+    volumes:
+      - ./searxng:/etc/searxng:rw
+    environment:
+      SEARXNG_BASE_URL: "http://searxng:8080/"
+    # Pas de port publié vers l'hôte : uniquement joignable par les autres
+    # containers de ce compose (hermes) via le réseau docker interne. Le
+    # format JSON de l'API SearXNG (activé dans searxng/settings.yml) ne
+    # doit jamais être exposé publiquement sans authentification.
+
+# Pas de réseau ollama-net ici (contrairement à docker-compose.yml) : ce
+# réseau existe sur la machine locale de Fred pour un futur usage d'Ollama
+# comme provider LLM auxiliaire (voir DECISIONS.md) — rien ne dit qu'Ollama
+# tourne sur le serveur cible. `docker compose up` échouerait si le réseau
+# externe n'existe pas là-bas. À rajouter explicitement si un jour ce
+# serveur a aussi Ollama.

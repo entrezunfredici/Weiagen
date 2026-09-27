@@ -1,0 +1,6 @@
+# Dev-only dependencies for running the test suite (odoo-plugin/tests/).
+# NOT installed in the Hermes container (requirements.txt is what's baked
+# into the custom image / uv-pip-installed at runtime — see
+# .agents/CONVENTIONS.md) — this file is for local dev and CI only.
+-r requirements.txt
+pytest>=8.0

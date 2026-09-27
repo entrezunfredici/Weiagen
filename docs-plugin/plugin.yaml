@@ -1,0 +1,16 @@
+name: docs
+version: 1.0.0
+description: >
+  Create and read office documents (xlsx, docx, pptx). Generated files are
+  written to Hermes's document cache and returned with a MEDIA:<path> tag
+  so the agent can attach them to its reply (e.g. a Slack upload). Split
+  out of the odoo plugin — no Odoo dependency.
+author: "@fred (original OpenClaw plugin), ported to Hermes"
+kind: standalone
+provides_tools:
+  - docs_create_xlsx
+  - docs_create_docx
+  - docs_create_pptx
+  - docs_read_xlsx
+  - docs_read_docx
+  - docs_read_pptx

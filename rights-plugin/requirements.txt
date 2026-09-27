@@ -1,0 +1,19 @@
+# rights-plugin was stdlib-only until 2026-09-22 (see .agents/DECISIONS.md, "rights-plugin :
+# signature EdDSA pour les jetons d'identité MCP") — flagged and approved explicitly (AGENT.md
+# rule: no new dependency without signaling) before adding this one line.
+#
+# cryptography: needed by token_signer.py's EdDSA signer (Ed25519) for external MCP microservices
+# that require asymmetric identity tokens (some verifiers only accept EdDSA once an Ed25519 public
+# key is configured on their side — no HMAC fallback by design). HS256 signing keys still work with
+# zero dependencies; this is only imported when an "EdDSA" McpSigningKey is actually used (see
+# token_signer.py's top-of-file try/except — absence degrades to that one key being skipped,
+# not a crash).
+#
+# Also already a dependency of odoo-plugin/requirements.txt (Fernet-based encryption there) — not
+# a new package to this deployment's image, just the first time rights-plugin itself needs it.
+#
+# Its data models (RoleBinding, AccessRight) still declare no SecretField, so the vendored
+# rights_w_main/data_manager/secret_service.py's keyring/Fernet code paths remain unexercised —
+# those imports are separately wrapped in try/except ImportError in that file. See
+# .agents/DECISIONS.md ("rights-plugin: vendoring vs cross-plugin import").
+cryptography

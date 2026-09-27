@@ -1,0 +1,29 @@
+# =============================================================================
+#  PriorityClass — arbitrage d'éviction entre prod et preprod
+#
+#  Ressources CLUSTER-SCOPED, volontairement séparées des manifests par
+#  namespace : prod et preprod ne peuvent pas revendiquer le même objet
+#  cluster. À appliquer UNE SEULE FOIS sur le cluster :
+#      kubectl apply -f k8s/priorityclasses.yml
+#
+#  Effet : sous pression mémoire d'un nœud, kubelet évince d'abord les pods de
+#  plus faible priorité — la preprod cède avant la production, jamais l'inverse.
+#  Référencer via `priorityClassName` dans les Deployments (pas encore fait
+#  dans k8s/prod|preprod/deployment.yml — à ajouter si un cluster multi-nœuds
+#  partagé entre prod/preprod le justifie un jour).
+# =============================================================================
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: weiagen-prod
+value: 1000
+globalDefault: false
+description: "Weiagen production — évincée en dernier."
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: weiagen-preprod
+value: 100
+globalDefault: false
+description: "Weiagen preprod — évincée en premier sous pression."

@@ -1,0 +1,141 @@
+# =============================================================================
+#  Deployments prod — Weiagen
+#
+#  Prérequis sur le cluster :
+#    - Namespace weiagen créé (k8s/prod/namespace.yml)
+#    - Secret weiagen-prod-secrets créé (voir k8s/secrets.env.example)
+#    - ConfigMap weiagen-prod-config créée (k8s/prod/configmap.yml)
+#    - ClusterIssuer cert-manager configuré (k8s/cert-manager/), si l'Ingress
+#      est utilisé (k8s/prod/ingress.yml)
+#
+#  DÉSACTIVÉ pour l'instant : ce déploiement n'est appliqué par le CD
+#  (.github/workflows/cd.yml) que si la variable GitHub Actions
+#  K8S_PROD_ENABLED=true est définie — le cluster Weiagen n'existe pas encore.
+#  Applicable manuellement dès qu'un cluster est prêt : kubectl apply -f k8s/prod/
+# =============================================================================
+
+# ── Volume persistant — $HERMES_HOME (config JSON, keyring de secrets chiffrés,
+#    journal d'audit SQLite, cache documents docs-plugin) ─────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: weiagen-prod-hermes-data
+  namespace: weiagen
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 10Gi
+
+---
+
+# ── Hermes Agent (+ plugins odoo/rights/audit/docs bakés dans l'image, voir
+#    Dockerfile) ────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weiagen-prod-hermes
+  namespace: weiagen
+spec:
+  replicas: 1 # stockage JSON/SQLite local au volume — pas de scale horizontal
+  strategy:
+    type: Recreate # un seul writer possible sur le PVC ReadWriteOnce
+  selector:
+    matchLabels:
+      app: weiagen-prod-hermes
+  template:
+    metadata:
+      labels:
+        app: weiagen-prod-hermes
+    spec:
+      containers:
+        - name: hermes
+          image: ${DOCKERHUB_USERNAME}/weiagen_hermes:latest # substitué par le CD
+          imagePullPolicy: Always
+          command: ["gateway", "run"]
+          ports:
+            - name: gateway
+              containerPort: 8642
+            - name: dashboard
+              containerPort: 9119
+          envFrom:
+            - configMapRef:
+                name: weiagen-prod-config
+            - secretRef:
+                name: weiagen-prod-secrets
+          readinessProbe:
+            # Pas d'endpoint /health documenté et le dashboard exige une
+            # authentification (une sonde HTTP sans credentials verrait 401,
+            # jamais "ready") — on vérifie juste que le process écoute.
+            tcpSocket:
+              port: 8642
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 4Gi
+          volumeMounts:
+            - name: hermes-data
+              mountPath: /opt/data
+      volumes:
+        - name: hermes-data
+          persistentVolumeClaim:
+            claimName: weiagen-prod-hermes-data
+
+---
+
+# ── SearXNG (backend de recherche web, interne au namespace uniquement) ──────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: weiagen-prod-searxng
+  namespace: weiagen
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: weiagen-prod-searxng
+  template:
+    metadata:
+      labels:
+        app: weiagen-prod-searxng
+    spec:
+      containers:
+        - name: searxng
+          image: searxng/searxng:latest
+          env:
+            - name: SEARXNG_BASE_URL
+              value: "http://weiagen-prod-searxng:8080/"
+          ports:
+            - containerPort: 8080
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: searxng-settings
+              mountPath: /etc/searxng/settings.yml
+              subPath: settings.yml
+      volumes:
+        # Créée manuellement une fois (config non sensible, source de vérité =
+        # searxng/settings.yml de ce dépôt) :
+        #   kubectl create configmap weiagen-prod-searxng-settings \
+        #     -n weiagen --from-file=settings.yml=searxng/settings.yml
+        - name: searxng-settings
+          configMap:
+            name: weiagen-prod-searxng-settings

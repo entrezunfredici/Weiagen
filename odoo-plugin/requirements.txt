@@ -1,0 +1,5 @@
+odoo-client-lib
+keyring
+cryptography
+# openpyxl / python-docx / python-pptx moved to docs-plugin/requirements.txt
+# together with w_docs/ on 2026-09-24 (see .agents/DECISIONS.md).

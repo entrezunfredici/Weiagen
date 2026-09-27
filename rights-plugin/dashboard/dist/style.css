@@ -1,0 +1,249 @@
+.hermes-rights-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 1rem;
+  max-width: 780px;
+}
+
+.hermes-rights-intro {
+  font-size: 0.85rem;
+  opacity: 0.75;
+  margin: -0.5rem 0 0;
+}
+
+.hermes-rights-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.hermes-rights-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hermes-rights-section-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+/* One block per resource_type inside the Access rights section — visually
+   grouped (border) so it reads as "these rights all govern the same kind
+   of resource", whether that's Hermes's own built-ins (hermes_tool/
+   hermes_cron) or a plugin's own resource_type (odoo_model, ...). */
+.hermes-rights-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.2));
+  border-radius: 0.5rem;
+}
+
+.hermes-rights-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.hermes-rights-group-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.hermes-rights-group-note {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  margin: -0.25rem 0 0.25rem;
+}
+
+.hermes-rights-empty {
+  font-size: 0.85rem;
+  opacity: 0.6;
+  padding: 0.5rem 0;
+}
+
+.hermes-rights-row {
+  margin: 0;
+}
+
+.hermes-rights-row-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.hermes-rights-row-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.hermes-rights-row-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.hermes-rights-row-sub {
+  width: 100%;
+  font-size: 0.75rem;
+  opacity: 0.65;
+}
+
+.hermes-rights-row-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+/* RoleRow: header row + member tag-list + optional "Add person" form,
+   stacked — unlike the plain single-line .hermes-rights-row-content used
+   by every other row type. */
+.hermes-rights-row-content-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.6rem 0.75rem;
+}
+
+.hermes-rights-tag-removable {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.hermes-rights-tag-remove {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0;
+  opacity: 0.75;
+}
+
+.hermes-rights-tag-remove:hover {
+  opacity: 1;
+}
+
+.hermes-rights-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.3));
+  border-radius: 0.5rem;
+}
+
+.hermes-rights-form-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.hermes-rights-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.hermes-rights-field-label {
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.hermes-rights-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.hermes-rights-checkbox-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.hermes-rights-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.hermes-rights-error {
+  font-size: 0.8rem;
+  color: var(--destructive, #e5484d);
+}
+
+.hermes-rights-directory-select {
+  height: 2rem;
+  font-size: 0.85rem;
+  padding: 0 0.5rem;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.3));
+  background: var(--background, transparent);
+  color: inherit;
+}
+
+.hermes-rights-directory-status {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+}
+
+.hermes-rights-tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.hermes-rights-tag {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.3));
+  background: var(--background, transparent);
+  color: inherit;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.hermes-rights-tag:hover {
+  border-color: var(--primary, #4f9d69);
+}
+
+.hermes-rights-tag-selected {
+  background: var(--primary, #4f9d69);
+  border-color: var(--primary, #4f9d69);
+  color: var(--primary-foreground, #fff);
+  font-weight: 600;
+}
+
+/* MCP signing key secret, shown right after create/edit or via "Reveal" —
+   monospace + wrap so a long random secret is easy to select/copy whole. */
+.hermes-rights-secret-reveal {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  word-break: break-all;
+  padding: 0.5rem 0.6rem;
+  margin: 0;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border, rgba(128, 128, 128, 0.3));
+  background: var(--muted, rgba(128, 128, 128, 0.08));
+}

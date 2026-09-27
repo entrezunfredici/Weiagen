@@ -1,0 +1,14 @@
+{
+  "name": "audit",
+  "label": "Audit",
+  "description": "Read-only audit log of every tool call and approval decision, with hash-chain verification",
+  "icon": "Eye",
+  "version": "1.0.0",
+  "tab": {
+    "path": "/audit",
+    "position": "after:rights"
+  },
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}

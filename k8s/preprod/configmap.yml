@@ -1,0 +1,39 @@
+# =============================================================================
+#  ConfigMap preprod — variables non-sensibles
+#
+#  Les variables sensibles sont dans un Secret K8s nommé weiagen-preprod-secrets,
+#  créé manuellement sur le cluster à partir de k8s/secrets.env.example :
+#
+#    cp k8s/secrets.env.example k8s/secrets.env   # rempli, jamais commité
+#    kubectl create secret generic weiagen-preprod-secrets \
+#      --namespace weiagen-preprod --from-env-file=k8s/secrets.env
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: weiagen-preprod-config
+  namespace: weiagen-preprod
+data:
+  # ── Environnement ───────────────────────────────────────────────────────────
+  ENVIRONMENT: "preprod"
+  HERMES_UID: "1000"
+  HERMES_GID: "1000"
+  HERMES_DASHBOARD: "1"
+
+  # ── Dashboard (identifiant seulement — mot de passe/secret dans le Secret) ───
+  HERMES_DASHBOARD_BASIC_AUTH_USERNAME: "admin"
+
+  # ── Slack (voir docker-compose.yml pour le détail de chaque variable) ────────
+  SLACK_ALLOWED_USERS: ""
+  SLACK_ALLOWED_CHANNELS: ""
+  SLACK_ALLOW_ALL_USERS: "true"
+
+  # ── rights-plugin / audit-plugin / docs-plugin ───────────────────────────────
+  RIGHTS_MCP_TOKEN_TTL_SECONDS: ""
+  AUDIT_RETENTION_DAYS: ""
+  AUDIT_AGENT_TOOL_ENABLED: ""
+  DOCS_OUTPUT_DIRS: ""
+
+  # ── SearXNG (service interne au namespace, voir deployment.yml/service.yml) ──
+  SEARXNG_URL: "http://weiagen-preprod-searxng:8080"

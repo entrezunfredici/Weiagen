@@ -1,0 +1,143 @@
+# Déploiement de Hermes Agent (NousResearch) à partir de l'image publiée sur
+# Docker Hub — pas de build depuis les sources, pas de clone du code vendorisé
+# dans ce dépôt (voir DECISIONS.md). Réseau bridge classique, un seul
+# container qui supervise gateway + dashboard (HERMES_DASHBOARD=1) — pattern
+# documenté dans la doc upstream ("Docker Compose example",
+# https://github.com/NousResearch/hermes-agent). Service indépendant : aucune
+# dépendance sur d'autres services, rejoint juste ollama-net
+# en option pour pouvoir un jour utiliser l'IA locale comme provider
+# secondaire/auxiliaire (voir DECISIONS.md — pas comme provider principal,
+# contexte 4096 tokens CPU insuffisant pour Hermes qui exige 64k tokens
+# minimum).
+services:
+  hermes:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes
+    restart: unless-stopped
+    command: ["gateway", "run"]
+    shm_size: "1g"
+    ports:
+      - "8642:8642"
+      - "127.0.0.1:9119:9119"
+    volumes:
+      - ${HOME}/.hermes:/opt/data
+      # odoo plugin + skills, mounted directly from this repo (read-only) so
+      # the container sees them regardless of where the repo is checked out
+      # on the host — a symlink written into ~/.hermes pointing outside that
+      # volume does NOT resolve inside the container's mount namespace (see
+      # DECISIONS.md, this bit us on first boot). No install.sh step needed.
+      - ./odoo-plugin:/opt/data/plugins/odoo:ro
+      # Generic deny-by-default authorization plugin — odoo-plugin delegates
+      # its own rights checks to it (see .agents/DECISIONS.md, "rights-plugin:
+      # vendoring vs cross-plugin import"). Must always be enabled alongside
+      # odoo-plugin: without it, every Odoo CRUD call fails closed.
+      - ./rights-plugin:/opt/data/plugins/rights:ro
+      # Append-only, hash-chained audit log of every tool call (incl. calls
+      # blocked by rights-plugin) and approval decision — independent of
+      # rights-plugin, stdlib only (see .agents/DECISIONS.md, 2026-09-24).
+      - ./audit-plugin:/opt/data/plugins/audit:ro
+      # Office document generation (xlsx/docx/pptx) — split out of
+      # odoo-plugin on 2026-09-24, no Odoo dependency (see
+      # .agents/DECISIONS.md). Its Python deps (openpyxl, python-docx,
+      # python-pptx) need the same `uv pip install` step as odoo-plugin's.
+      - ./docs-plugin:/opt/data/plugins/docs:ro
+      - ./skills-odoo/odoo:/opt/data/skills/odoo:ro
+      - ./skills-odoo/odoo-sdk:/opt/data/skills/odoo-sdk:ro
+      - ./skills-odoo/odoo-crm:/opt/data/skills/odoo-crm:ro
+      - ./skills-odoo/odoo-hr:/opt/data/skills/odoo-hr:ro
+      - ./skills-odoo/odoo-accounting:/opt/data/skills/odoo-accounting:ro
+      - ./skills-odoo/odoo-inventory:/opt/data/skills/odoo-inventory:ro
+      - ./skills-odoo/odoo-dev:/opt/data/skills/odoo-dev:ro
+      # How rights-plugin gates tool calls/cron jobs and how to react to a
+      # block — always-discoverable like the skills-odoo/ ones above (not
+      # ctx.register_skill(), which only resolves explicitly — see
+      # .agents/DECISIONS.md, "Portage d'un plugin OpenClaw...").
+      - ./skills-rights/rights:/opt/data/skills/rights:ro
+      # How to use docs-plugin's tools, and how to send the generated file
+      # (MEDIA:<path>) — was skills-odoo/odoo-docs before 2026-09-24.
+      - ./skills-docs/docs:/opt/data/skills/docs:ro
+    environment:
+      HERMES_UID: "${HERMES_UID:-1000}"
+      HERMES_GID: "${HERMES_GID:-1000}"
+      HERMES_DASHBOARD: "1"
+      HERMES_DASHBOARD_BASIC_AUTH_USERNAME: "${HERMES_DASHBOARD_BASIC_AUTH_USERNAME}"
+      HERMES_DASHBOARD_BASIC_AUTH_PASSWORD: "${HERMES_DASHBOARD_BASIC_AUTH_PASSWORD}"
+      HERMES_DASHBOARD_BASIC_AUTH_SECRET: "${HERMES_DASHBOARD_BASIC_AUTH_SECRET}"
+      # Slack gateway platform (native to Hermes, see AGENT.md / hermes slack
+      # manifest) — both tokens come from the Slack app config.
+      SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN}"
+      SLACK_APP_TOKEN: "${SLACK_APP_TOKEN}"
+      # Optional: comma-separated Slack user IDs allowed to talk to the bot.
+      # Leave unset and Hermes defaults to pairing/allowlist-deny for unknown
+      # senders (see the gateway startup warning in the logs).
+      SLACK_ALLOWED_USERS: "${SLACK_ALLOWED_USERS:-}"
+      # Whitelist of Slack channel IDs the bot responds in (messages from
+      # other channels are silently ignored, even if @mentioned). DMs are
+      # never filtered by this. Useful to test in one channel before opening
+      # it up more broadly.
+      SLACK_ALLOWED_CHANNELS: "${SLACK_ALLOWED_CHANNELS:-}"
+      # No per-user allowlist (company-wide workspace, deliberate choice —
+      # see DECISIONS.md). Hermes fails closed by design (SECURITY.md §2.6)
+      # unless explicitly opted out per platform.
+      SLACK_ALLOW_ALL_USERS: "${SLACK_ALLOW_ALL_USERS:-true}"
+      # Encrypts secrets (Odoo passwords, etc.) at rest in the odoo plugin's
+      # file keyring (Fernet/AES). Generate with:
+      #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      # Losing this key makes existing encrypted secrets unrecoverable — back
+      # it up alongside the rest of .env, never commit it.
+      ODOO_PLUGIN_ENCRYPTION_KEY: "${ODOO_PLUGIN_ENCRYPTION_KEY}"
+      # Durée de vie (secondes) des jetons d'identité signés que rights-
+      # plugin injecte pour les serveurs MCP EXTERNES (voir
+      # rights-plugin/token_signer.py) — les clés de signature elles-mêmes
+      # (une par MCP externe) sont gérées depuis le dashboard "Access
+      # Groups" ou `hermes rights mcp-key add`, pas via .env : ça évite
+      # tout redémarrage du container pour ajouter/faire tourner une clé.
+      # Vide = valeur par défaut du code (300s).
+      RIGHTS_MCP_TOKEN_TTL_SECONDS: "${RIGHTS_MCP_TOKEN_TTL_SECONDS:-}"
+      # audit-plugin: retention of the audit log in days (empty = 90, 0 =
+      # keep forever), and opt-in for the `audit_search` agent tool (off by
+      # default: it exposes everyone's tool activity to whoever talks to the
+      # agent — only enable it with a rights-plugin hermes_tool right
+      # restricting audit_search to an admin role, see audit-plugin/README.md).
+      AUDIT_RETENTION_DAYS: "${AUDIT_RETENTION_DAYS:-}"
+      AUDIT_AGENT_TOOL_ENABLED: "${AUDIT_AGENT_TOOL_ENABLED:-}"
+      # docs-plugin: extra absolute directories (comma-separated) where
+      # docs_create_* may write, on top of Hermes's document cache (the
+      # default, always attachable to a reply). Empty = cache only.
+      DOCS_OUTPUT_DIRS: "${DOCS_OUTPUT_DIRS:-}"
+      # Backend de recherche web (provider "searxng" de Hermes, voir
+      # agent/web_search_provider.py) — sans clé API configurée (Brave,
+      # Tavily, Exa...), Hermes retombe sur du scraping DuckDuckGo brut
+      # (provider "ddgs"), peu fiable et source d'URLs hallucinées. SearXNG
+      # auto-hébergé (service ci-dessous, réseau interne uniquement)
+      # remplace ça par de vrais résultats agrégés, gratuit et sans limite
+      # de requêtes. Voir CHANGELOG_AGENT.md, 2026-08-04.
+      SEARXNG_URL: "http://searxng:8080"
+    networks:
+      - default
+      - ollama-net
+    depends_on:
+      - searxng
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: searxng
+    restart: unless-stopped
+    volumes:
+      - ./searxng:/etc/searxng:rw
+    environment:
+      SEARXNG_BASE_URL: "http://searxng:8080/"
+    # Pas de port publié vers l'hôte : uniquement joignable par les autres
+    # containers de ce compose (hermes) via le réseau docker interne. Le
+    # format JSON de l'API SearXNG (activé dans searxng/settings.yml) ne
+    # doit jamais être exposé publiquement sans authentification.
+
+networks:
+  ollama-net:
+    name: ollama-net
+    external: true

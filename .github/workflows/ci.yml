@@ -1,0 +1,85 @@
+# GitHub Actions CI — unit tests for odoo-plugin/, rights-plugin/, audit-plugin/ and
+# docs-plugin/ (the only parts of this repo with code to test; docker-compose.yml/.env
+# are deployment config, see .agents/CONVENTIONS.md for the scope split). Deployment
+# itself stays manual (docker compose) — this workflow does not build or push
+# anything.
+#
+# Replaces the retired .gitlab-ci.yml (repo moved from GitLab to GitHub, 2026-09-27):
+# same jobs, same commands, same "every push and every PR" trigger (GitLab's rules on
+# `merge_request_event`/`CI_COMMIT_BRANCH` map to `pull_request`/`push` here).
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-odoo-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: odoo-plugin/requirements-dev.txt
+      - run: pip install --disable-pip-version-check -q -r odoo-plugin/requirements-dev.txt
+      - run: cd odoo-plugin && python -m pytest tests/ -v
+
+  test-rights-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: rights-plugin/requirements-dev.txt
+      - run: pip install --disable-pip-version-check -q -r rights-plugin/requirements-dev.txt
+      - run: cd rights-plugin && python -m pytest tests/ -v
+
+  test-audit-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: audit-plugin/requirements-dev.txt
+      - run: pip install --disable-pip-version-check -q -r audit-plugin/requirements-dev.txt
+      - run: cd audit-plugin && python -m pytest tests/ -v
+
+  test-docs-plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: docs-plugin/requirements-dev.txt
+      - run: pip install --disable-pip-version-check -q -r docs-plugin/requirements-dev.txt
+      - run: cd docs-plugin && python -m pytest tests/ -v
+
+  # rights-plugin/dashboard/dist/index.js is a GENERATED file (see .agents/DECISIONS.md,
+  # 2026-08-18) — assembled from dashboard/src/*.js by dashboard/build.sh, never
+  # hand-edited. This job re-runs that exact build and fails if the committed
+  # dist/index.js differs from what src/ actually produces — catches "edited src/,
+  # forgot to rebuild before committing" before it reaches a branch. The Docker image
+  # build also regenerates dist/index.js from src/ at COPY time (belt-and-suspenders —
+  # test-server never serves a stale bundle even if this check were somehow bypassed), so this
+  # job is purely an early, cheap signal for whoever pushed the commit.
+  test-rights-plugin-dashboard-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sh rights-plugin/dashboard/build.sh
+      - name: Check dist/index.js is in sync with src/*.js
+        run: |
+          if ! git diff --exit-code -- rights-plugin/dashboard/dist/index.js; then
+            echo "ERROR: rights-plugin/dashboard/dist/index.js is out of sync with dashboard/src/*.js."
+            echo "Run ./dashboard/build.sh (from rights-plugin/dashboard/) and commit the regenerated dist/index.js."
+            exit 1
+          fi

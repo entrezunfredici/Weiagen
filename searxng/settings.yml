@@ -1,0 +1,26 @@
+# Override minimal par-dessus les settings par défaut de l'image
+# searxng/searxng (use_default_settings: true fusionne avec eux — voir
+# https://docs.searxng.org/admin/settings/settings.html#use-default-settings).
+#
+# Seul but de cette instance : servir de backend de recherche pour Hermes
+# (provider "searxng", voir agent/web_search_provider.py côté Hermes) via
+# son API JSON interne. Pas exposée publiquement (pas de port host mappé
+# dans docker-compose*.yml) — seul le container hermes peut l'atteindre,
+# sur le réseau docker interne du projet.
+use_default_settings: true
+
+server:
+  # Sans impact de sécurité réel ici (instance non exposée publiquement),
+  # mais requis par SearXNG au démarrage. Régénérer avec
+  # `python3 -c "import secrets; print(secrets.token_hex(32))"` si besoin.
+  secret_key: "edafb79ec3000ec756dcacd901358544626bc6714c532addfddec1fc6141d99b"
+  limiter: false
+
+search:
+  # "json" est désactivé par défaut (anti-abus sur les instances publiques)
+  # — c'est le format que le provider searxng de Hermes utilise
+  # (GET /search?format=json). "html" reste dispo pour un usage manuel via
+  # le tunnel SSH du dashboard si besoin de déboguer.
+  formats:
+    - html
+    - json

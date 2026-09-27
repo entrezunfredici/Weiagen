@@ -1,0 +1,23 @@
+name: odoo
+version: 1.0.0
+description: >
+  Deny-by-default Odoo connector (bounded CRUD gated by per-field rights).
+  Ported from an OpenClaw plugin originally built for a single Odoo
+  deployment. Office document generation (xlsx/docx/pptx) moved to the
+  separate `docs` plugin on 2026-09-24.
+author: "@fred (original OpenClaw plugin), ported to Hermes"
+kind: standalone
+provides_tools:
+  - odoo_config_validate
+  - odoo_list_connection_profiles
+  - odoo_list_rights
+  - odoo_sdk_read
+  - odoo_sdk_create
+  - odoo_sdk_update
+  - odoo_sdk_delete
+  - odoo_sdk_list_models
+  - odoo_sdk_list_fields
+  - odoo_sdk_list_allowed_models
+  - odoo_sdk_list_allowed_fields
+provides_hooks:
+  - pre_tool_call

@@ -1,0 +1,2 @@
+# audit-plugin runtime dependencies: none — stdlib only (sqlite3, hashlib,
+# json, re). No `uv pip install` step needed for this plugin.

@@ -1,0 +1,40 @@
+# =============================================================================
+#  Ingress preprod — Weiagen
+#
+#  Expose uniquement le dashboard Hermes (déjà protégé par basic auth — voir
+#  k8s/secrets.env.example). Le port gateway (8642) n'a pas besoin d'être
+#  public : les plateformes (Slack, etc.) sont des connexions sortantes.
+#
+#  Domaine : <votre-domaine.com> — À REMPLACER avant d'appliquer.
+#  Namespace : weiagen-preprod
+#  SSL : Let's Encrypt via cert-manager + Cloudflare DNS01
+#
+#  Prérequis : identiques à k8s/prod/ingress.yml.
+# =============================================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: weiagen-preprod-dashboard
+  namespace: weiagen-preprod
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod-cloudflare
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - preprod-dashboard.<votre-domaine.com> # ← remplacer
+      secretName: weiagen-preprod-dashboard-tls
+  rules:
+    - host: preprod-dashboard.<votre-domaine.com> # ← remplacer
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: weiagen-preprod-hermes
+                port:
+                  number: 9119

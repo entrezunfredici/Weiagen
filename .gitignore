@@ -1,0 +1,19 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Kubernetes secrets/kubeconfig — never commit
+k8s/secrets.env
+k8s/secrets-*.env
+!k8s/secrets.env.example
+k8s/kubeconfig/
+k8s/cert-manager/cloudflare-secret.yml
+!k8s/cert-manager/cloudflare-secret.yml.example
+
+# Python
+__pycache__/
+*.pyc
+.ruff_cache/
+.pytest_cache/
+.cache/

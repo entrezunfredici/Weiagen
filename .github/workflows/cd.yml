@@ -1,0 +1,319 @@
+name: CD
+
+# Déclenché quand le CI se termine sur les branches de déploiement
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+      - staging
+      - dev
+
+permissions:
+  contents: read
+
+# =============================================================================
+#  Secrets GitHub requis :
+#
+#  Communs :
+#    DOCKERHUB_USERNAME      — nom d'utilisateur Docker Hub
+#    DOCKERHUB_PASSWORD      — mot de passe / token Docker Hub
+#    DISCORD_LOG             — webhook Discord pour les notifications (optionnel —
+#                              tant qu'il n'est pas configuré, le job notify échoue
+#                              silencieusement sans bloquer le reste du pipeline)
+#
+#  Branche staging → environnement "preprod" (Kubernetes — activé via variable
+#  K8S_PREPROD_ENABLED=true ; cluster Weiagen pas encore créé, désactivé pour
+#  l'instant) :
+#    KUBECONFIG_PREPROD      — kubeconfig base64 pour le cluster K8s preprod
+#
+#  Branche main (Kubernetes prod — activé via variable K8S_PROD_ENABLED=true,
+#  désactivé pour l'instant) :
+#    KUBECONFIG_PROD         — kubeconfig base64 pour le cluster K8s prod
+#
+#  Pas de palier "test" sur VPS pour l'instant (branche dev) — seules les
+#  images sont buildées/poussées, rien n'est déployé automatiquement. À
+#  ajouter le jour où un VPS de test est disponible (voir .agents/DECISIONS.md).
+# =============================================================================
+
+jobs:
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  1. BUILD & PUSH IMAGE DOCKER HUB
+  #     - dev     : weiagen_hermes_test:latest
+  #     - staging : weiagen_hermes_preprod:latest
+  #     - main    : weiagen_hermes:latest
+  #     Une seule image (le Dockerfile de la racine bake odoo/rights/audit/docs-
+  #     plugin + skills + dépendances) — pas de front/API séparés dans ce projet.
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  push_images:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push'
+    outputs:
+      branch: ${{ steps.vars.outputs.branch }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Export branch name
+        id: vars
+        run: echo "branch=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      # Suffixe d'image selon la branche : dev → _test, staging → _preprod, main → (aucun)
+      - name: Compute image name
+        id: image
+        run: |
+          case "${{ github.event.workflow_run.head_branch }}" in
+            dev)     SUFFIX="_test" ;;
+            staging) SUFFIX="_preprod" ;;
+            main)    SUFFIX="" ;;
+            *)       echo "Branche inattendue" ; exit 1 ;;
+          esac
+          echo "name=${{ secrets.DOCKERHUB_USERNAME }}/weiagen_hermes${SUFFIX}:latest" >> $GITHUB_OUTPUT
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # cache-from/to gha : les couches Docker (uv pip install, skills COPY…) sont
+      # réutilisées entre les runs — seul ce qui change est rebuildé.
+      - name: Build and Push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.image.outputs.name }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  1b. TAG DE VERSION + RELEASE GITHUB (staging/main uniquement)
+  #      Convention AAAA.MM.n, incrémentée par mois et par environnement,
+  #      préfixée "staging-" pour ce dernier afin de ne jamais entrer en
+  #      collision avec les tags git de main sur le même dépôt.
+  #      N'affecte pas le déploiement : tourne en parallèle de deploy_preprod/
+  #      deploy_prod, jamais en amont — un échec de tag/release ne doit pas
+  #      bloquer une mise en prod.
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  tag_release:
+    name: Tag de version + Release GitHub
+    runs-on: ubuntu-latest
+    needs: push_images
+    if: needs.push_images.outputs.branch == 'staging' || needs.push_images.outputs.branch == 'main'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0 # historique complet requis pour lister les tags existants
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute image name
+        id: image
+        run: |
+          case "${{ needs.push_images.outputs.branch }}" in
+            staging) SUFFIX="_preprod" ;;
+            main)    SUFFIX="" ;;
+          esac
+          echo "name=${{ secrets.DOCKERHUB_USERNAME }}/weiagen_hermes${SUFFIX}" >> "$GITHUB_OUTPUT"
+
+      - name: Compute next version tag (AAAA.MM.n)
+        id: version
+        run: |
+          BRANCH="${{ needs.push_images.outputs.branch }}"
+          PREFIX=""
+          if [ "$BRANCH" = "staging" ]; then PREFIX="staging-"; fi
+          YM=$(date -u +%Y.%m)
+          LAST=$(git tag -l "${PREFIX}v${YM}.*" | sed -E "s/^${PREFIX}v${YM}\.//" | sort -n | tail -1)
+          NEXT=$(( ${LAST:-0} + 1 ))
+          VERSION="${PREFIX}v${YM}.${NEXT}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Version calculée : $VERSION"
+
+      # Retague l'image :latest déjà poussée par push_images sans rebuild (même manifeste/digest) —
+      # un rollback k8s peut ainsi cibler explicitement ":${VERSION}" plutôt que le ":latest" mouvant.
+      - name: Tag Docker image with the version (no rebuild)
+        run: |
+          docker buildx imagetools create \
+            --tag ${{ steps.image.outputs.name }}:${{ steps.version.outputs.version }} \
+            ${{ steps.image.outputs.name }}:latest
+
+      - name: Create and push git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.version }}" \
+            -m "Déploiement ${{ needs.push_images.outputs.branch }} — ${{ steps.version.outputs.version }}" \
+            "${{ github.event.workflow_run.head_sha }}"
+          git push origin "${{ steps.version.outputs.version }}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.version }}" \
+            --title "${{ steps.version.outputs.version }}" \
+            --notes "Déploiement automatique — branche \`${{ needs.push_images.outputs.branch }}\`, commit \`${{ github.event.workflow_run.head_sha }}\`.
+
+          Image Docker Hub : \`${{ steps.image.outputs.name }}:${{ steps.version.outputs.version }}\`"
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  2a. DEPLOY PREPROD → Kubernetes
+  #      Namespace : weiagen-preprod
+  #      DÉSACTIVÉ jusqu'à K8S_PREPROD_ENABLED=true dans Settings → Variables
+  #      (cluster Weiagen pas encore créé — voir .agents/DECISIONS.md).
+  #
+  #      Première fois sur un nouveau cluster : appliquer aussi les ressources
+  #      qui ne sont pas gérées ici — k8s/cert-manager/, k8s/priorityclasses.yml,
+  #      la ConfigMap settings.yml de SearXNG et le Secret de k8s/secrets.env.example
+  #      (voir les commentaires de chaque fichier sous k8s/).
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  deploy_preprod:
+    name: Deploy to Kubernetes (preprod)
+    runs-on: ubuntu-latest
+    needs: push_images
+    if: needs.push_images.outputs.branch == 'staging' && vars.K8S_PREPROD_ENABLED == 'true'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # Pas de version épinglée : le cluster cible n'existe pas encore, donc pas
+      # de version de référence à suivre. Épingler (`version: vX.Y.Z`) une fois
+      # un vrai cluster provisionné, pour éviter toute dérive silencieuse.
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_PREPROD }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Verify cluster connection
+        run: kubectl cluster-info
+
+      - name: Apply manifests
+        run: kubectl apply -f k8s/preprod/
+
+      # `:latest` est un tag mutable — `apply` seul ne redéploie pas une image déjà
+      # tirée une fois. `rollout restart` force chaque pod à repartir et à retirer
+      # l'image (imagePullPolicy: Always).
+      - name: Roll out new image
+        run: |
+          kubectl rollout restart deployment/weiagen-preprod-hermes -n weiagen-preprod
+          kubectl rollout status deployment/weiagen-preprod-hermes -n weiagen-preprod --timeout=180s
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  2b. DEPLOY PROD → Kubernetes
+  #      Namespace : weiagen
+  #      DÉSACTIVÉ jusqu'à K8S_PROD_ENABLED=true dans Settings → Variables
+  #      (cluster Weiagen pas encore créé — voir .agents/DECISIONS.md).
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  deploy_prod:
+    name: Deploy to Kubernetes (prod)
+    runs-on: ubuntu-latest
+    needs: push_images
+    if: needs.push_images.outputs.branch == 'main' && vars.K8S_PROD_ENABLED == 'true'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      # Voir le commentaire équivalent dans deploy_preprod ci-dessus (pas de
+      # version épinglée tant qu'il n'y a pas de cluster réel à suivre).
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_PROD }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+
+      - name: Verify cluster connection
+        run: kubectl cluster-info
+
+      - name: Apply manifests
+        run: kubectl apply -f k8s/prod/
+
+      - name: Roll out new image
+        run: |
+          kubectl rollout restart deployment/weiagen-prod-hermes -n weiagen
+          kubectl rollout status deployment/weiagen-prod-hermes -n weiagen --timeout=300s
+
+  # ═══════════════════════════════════════════════════════════════════════════
+  #  3. NOTIFICATIONS DISCORD
+  # ═══════════════════════════════════════════════════════════════════════════
+
+  notify:
+    name: Notify Discord
+    runs-on: ubuntu-latest
+    needs: [push_images, tag_release, deploy_preprod, deploy_prod]
+    if: always() && needs.push_images.result == 'success'
+    steps:
+      # Le job de déploiement réellement ciblé par la branche (deploy_preprod /
+      # deploy_prod) est distingué explicitement — "déployé" vs "SKIPPED" vs
+      # "échoué" — plutôt qu'un seul verdict global. Un job conditionné par une
+      # variable GitHub (K8S_PROD_ENABLED/K8S_PREPROD_ENABLED, toutes deux
+      # désactivées pour l'instant) qui ne se déclenche pas prend le statut
+      # `skipped`, jamais `failure` — c'est attendu tant que le cluster n'existe
+      # pas, donc pas une alerte à traiter comme un échec.
+      - name: Send notification
+        run: |
+          BRANCH="${{ github.event.workflow_run.head_branch }}"
+
+          case "$BRANCH" in
+            main)    TARGET_JOB="deploy_prod";    TARGET_RESULT="${{ needs.deploy_prod.result }}" ;;
+            staging) TARGET_JOB="deploy_preprod"; TARGET_RESULT="${{ needs.deploy_preprod.result }}" ;;
+            dev)     TARGET_JOB="";               TARGET_RESULT="" ;;
+            *)       TARGET_JOB="";               TARGET_RESULT="" ;;
+          esac
+
+          if [[ "${{ contains(needs.*.result, 'failure') }}" == "true" ]]; then
+            EMOJI="❌"
+            MESSAGE="Déploiement **${BRANCH}** échoué."
+          elif [[ -n "$TARGET_JOB" && "$TARGET_RESULT" == "skipped" ]]; then
+            EMOJI="⚠️"
+            ENV_UPPER=$(echo "${TARGET_JOB#deploy_}" | tr '[:lower:]' '[:upper:]')
+            MESSAGE="Image **${BRANCH}** buildée, mais **${TARGET_JOB}** non exécuté (skipped) — K8s pas encore activé (K8S_${ENV_UPPER}_ENABLED) ou cluster indisponible."
+          elif [[ "$BRANCH" == "dev" ]]; then
+            EMOJI="✅"
+            MESSAGE="Image **dev** buildée et poussée (pas de déploiement automatique pour cette branche)."
+          else
+            EMOJI="✅"
+            MESSAGE="Déploiement **${BRANCH}** réussi."
+          fi
+
+          curl -s -X POST -H "Content-Type: application/json" \
+            -d "{\"content\": \"${EMOJI} ${MESSAGE}\"}" \
+            "${{ secrets.DISCORD_LOG }}"

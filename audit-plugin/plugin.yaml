@@ -1,0 +1,15 @@
+name: audit
+version: 1.0.0
+description: >
+  Append-only, hash-chained audit log of every tool call (who, which tool,
+  redacted arguments, outcome — including calls blocked by rights-plugin)
+  and every human approval decision, stored in a local SQLite file.
+  Queryable from the `hermes audit` CLI, the "Audit" dashboard tab, and an
+  opt-in `audit_search` agent tool. Independent of rights-plugin.
+author: "@fred"
+kind: standalone
+provides_tools:
+  - audit_search
+provides_hooks:
+  - post_tool_call
+  - post_approval_response

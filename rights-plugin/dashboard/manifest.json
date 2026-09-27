@@ -1,0 +1,14 @@
+{
+  "name": "rights",
+  "label": "Access Groups",
+  "description": "Manage identity→role bindings and deny-by-default access rights across Hermes and its plugins",
+  "icon": "ShieldCheck",
+  "version": "1.0.0",
+  "tab": {
+    "path": "/rights",
+    "position": "after:odoo"
+  },
+  "entry": "dist/index.js",
+  "css": "dist/style.css",
+  "api": "plugin_api.py"
+}

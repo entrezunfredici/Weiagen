@@ -1,0 +1,12 @@
+# Dev-only dependencies for running the test suite (rights-plugin/tests/).
+# NOT installed at runtime (requirements.txt is empty — see that file) — this
+# file is for local dev and CI only.
+-r requirements.txt
+pytest>=8.0
+# keyring/cryptography are only needed to run the vendored
+# test_secret_service.py/test_table.py smoke tests (proving the vendored
+# rights_w_main/data_manager copy behaves identically to odoo-plugin's) — the
+# plugin's own models never exercise these code paths at runtime, see
+# requirements.txt and rights_w_main/data_manager/secret_service.py's header.
+keyring
+cryptography

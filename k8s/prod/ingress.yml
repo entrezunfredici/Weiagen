@@ -1,0 +1,44 @@
+# =============================================================================
+#  Ingress prod — Weiagen
+#
+#  Expose uniquement le dashboard Hermes (déjà protégé par basic auth — voir
+#  k8s/secrets.env.example). Le port gateway (8642) n'a pas besoin d'être
+#  public : les plateformes (Slack, etc.) sont des connexions sortantes.
+#
+#  Domaine : <votre-domaine.com> — À REMPLACER avant d'appliquer.
+#  Namespace : weiagen
+#  SSL : Let's Encrypt via cert-manager + Cloudflare DNS01
+#
+#  Prérequis :
+#    - ingress-nginx installé sur le cluster
+#    - cert-manager installé
+#    - k8s/cert-manager/cloudflare-secret.yml appliqué
+#    - k8s/cert-manager/cluster-issuer-cloudflare.yml appliqué
+# =============================================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: weiagen-prod-dashboard
+  namespace: weiagen
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod-cloudflare
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - dashboard.<votre-domaine.com> # ← remplacer
+      secretName: weiagen-prod-dashboard-tls
+  rules:
+    - host: dashboard.<votre-domaine.com> # ← remplacer
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: weiagen-prod-hermes
+                port:
+                  number: 9119
