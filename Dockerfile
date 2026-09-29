@@ -54,11 +54,9 @@ COPY docs-plugin/ /opt/hermes/plugins/docs/
 # dans $HERMES_HOME/skills/ à chaque boot — c'est ce qui les rend
 # découvrables sans bind mount ni étape d'installation supplémentaire.
 COPY skills-odoo/odoo /opt/hermes/skills/odoo
-COPY skills-odoo/odoo-sdk /opt/hermes/skills/odoo-sdk
-COPY skills-odoo/odoo-crm /opt/hermes/skills/odoo-crm
-COPY skills-odoo/odoo-hr /opt/hermes/skills/odoo-hr
-COPY skills-odoo/odoo-accounting /opt/hermes/skills/odoo-accounting
-COPY skills-odoo/odoo-inventory /opt/hermes/skills/odoo-inventory
+# odoo-sdk, odoo-crm, odoo-hr, odoo-accounting et odoo-inventory ne sont pas
+# (encore) versionnés dans skills-odoo/ : les COPY sont retirés pour ne pas
+# casser le build. À rétablir une fois les dossiers committés.
 COPY skills-odoo/odoo-dev /opt/hermes/skills/odoo-dev
 
 # How rights-plugin gates tool calls/cron jobs and how to react to a block

@@ -35,4 +35,11 @@
 
 ## Historique
 
-_(vide — voir la note de réinitialisation ci-dessus)_
+### 2026-09-29 — Correctif build Docker (skills-odoo manquants)
+
+- `Dockerfile` : retrait des `COPY` de `skills-odoo/odoo-sdk`, `odoo-crm`,
+  `odoo-hr`, `odoo-accounting`, `odoo-inventory` — ces dossiers n'existent pas
+  dans le dépôt (seuls `odoo/` et `odoo-dev/` sont versionnés), ce qui faisait
+  échouer le build GitHub Actions. À rétablir une fois les dossiers committés.
+- Non modifié : `docker-compose.yml` monte encore ces chemins (dossiers vides
+  créés par Docker en local, sans effet bloquant).
